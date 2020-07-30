@@ -2,16 +2,16 @@ package org.apache.flink.training.assignments.orders;
 
 import akka.japi.tuple.Tuple4;
 import org.apache.flink.api.common.functions.FlatMapFunction;
+import org.apache.flink.api.common.functions.GroupReduceFunction;
+import org.apache.flink.api.common.functions.ReduceFunction;
+import org.apache.flink.api.common.state.ValueState;
+import org.apache.flink.api.common.state.ValueStateDescriptor;
+import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.TimeCharacteristic;
-import org.apache.flink.streaming.api.TimerService;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.co.KeyedCoProcessFunction;
-import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
-import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
-import org.apache.flink.streaming.api.windowing.time.Time;
-import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer010;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaProducer010;
 import org.apache.flink.training.assignments.domain.Allocation;
@@ -24,13 +24,8 @@ import org.apache.flink.training.assignments.utils.PropReader;
 import org.apache.flink.util.Collector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
-import org.apache.flink.streaming.api.functions.KeyedProcessFunction.Context;
-import org.apache.flink.streaming.api.functions.KeyedProcessFunction.OnTimerContext;
+
 import java.util.Properties;
-import org.apache.flink.api.common.state.ValueState;
-import org.apache.flink.api.common.state.ValueStateDescriptor;
-import scala.Int;
 
 /*
 Using the supplied order-generator.jar populate kafka topic
@@ -43,9 +38,9 @@ with your kafka cluster URL: kafka.dest.rlewis.wsn.riskfocus.com:9092
 5. Write the data to Kafka topic “demo-output”
  */
 
-public class KafkaOrderAssignment3 extends ExerciseBase {
+public class KafkaOrderAssignment4 extends ExerciseBase {
 
-    private static final Logger LOG = LoggerFactory.getLogger(KafkaOrderAssignment3.class);
+    private static final Logger LOG = LoggerFactory.getLogger(KafkaOrderAssignment4.class);
 
     public static final String KAFKA_ADDRESS = "kafka.dest.srini.wsn.riskfocus.com:9092";
     public static final String IN_TOPIC = "in";
@@ -105,10 +100,41 @@ public class KafkaOrderAssignment3 extends ExerciseBase {
         // Why window by 1 hour, assuming we have an hourly job to print running totals of held positions.
         DataStream<Tuple4<String, String,String, Integer>> processStream =
                                 flatmapStream
-                                        .keyBy((Tuple4<String, String, String, Integer> flatOrder) ->
-                                                flatOrder.t1()+flatOrder.t2()+flatOrder.t3()) // Key is a combination of Cusip,Acct,Sub.
-                                        .process(new GroupByKey());
+                                        .keyBy(new KeySelector<Tuple4<String, String, String, Integer>, String>() {
+                                            @Override
+                                            public String getKey(Tuple4<String, String, String, Integer> compositeKey)
+                                                    throws Exception {
+                                                return compositeKey.t1()+compositeKey.t2()+compositeKey.t3();
+                                            }
+                                        });
+                                        /*.reduceGroup(new GroupReduceFunction<Tuple4<String, String, String, Integer>, String>,
+                                                Tuple4<String, String, String, Integer>, String>>(){
+                                              @Override
+                                                public void reduce(Iterable<Tuple4<String, String, String, Integer>, String>> in, Collector<Tuple4<String, String, String, Integer>, String>> out) {
 
+                                                    Set<String> uniqStrings = new HashSet<String>();
+                                                    Integer key = null;
+
+                                                    // add all strings of the group to the set
+                                                    for (Tuple4<String, String, String, Integer> t : in) {
+                                                        key = t.f0;
+                                                        uniqStrings.add(t.f1);
+                                                    }
+
+                                                    // emit all unique strings.
+                                                    for (String s : uniqStrings) {
+                                                        out.collect(new Tuple4<String, String, String, Integer>(key, s));
+                                                    }
+                                                }
+                                          }
+                                )
+
+
+
+
+                                        ) // Key is a combination of Cusip,Acct,Sub.
+                                        .process(new GroupByKey());
+    */
 
         // publish it  to the out stream.
         processStream.addSink(producer);

@@ -119,7 +119,7 @@ public class KafkaOrderAssignment2 extends ExerciseBase {
         // publish it  to the out stream.
         processStream.addSink(producer);
 
-        env.execute("kafkaOrders for Srini Assignment2 namespace");
+        //env.execute("kafkaOrders for Srini Assignment2 namespace");
 
 
     }

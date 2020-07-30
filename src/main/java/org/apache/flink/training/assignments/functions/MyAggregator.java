@@ -11,7 +11,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MyAggregator
-        implements AggregateFunction<Tuple4<String, String,String,Integer>, Tuple4<String, String,String,Integer>,Tuple4<String, String, String, Integer>>
+        implements AggregateFunction<Tuple4<String, String,String,Integer>,
+                    Tuple4<String, String,String,Integer>,Tuple4<String, String, String, Integer>>
 {
 
     @Override
