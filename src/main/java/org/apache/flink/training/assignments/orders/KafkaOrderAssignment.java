@@ -82,7 +82,7 @@ public class KafkaOrderAssignment extends ExerciseBase {
                 new TupleSerializationSchema());
         producer.setWriteTimestampToKafka(true);
 
-        // Why should we key by Cusip
+        // key by Cusip
         // flatten the structure by extracting allocations for account, sub account,cusip and quantity .
         DataStream<Tuple4<String, String, String, Integer>> flatmapStream = env.addSource(consumer).keyBy("cusip")
                 .flatMap(new FlatMapFunction<Order,
@@ -113,15 +113,15 @@ public class KafkaOrderAssignment extends ExerciseBase {
         printOrTest(flatmapStream);
         // Why window by 1 hour, assuming we have an hourly job to print running totals of held positions.
         DataStream<Tuple4<String, String, String, Integer>> aggregateStream =
-                        flatmapStream.timeWindowAll(Time.minutes(3)).allowedLateness(Time.minutes(1))
+                        flatmapStream.keyBy(flatOrders -> flatOrders.t1()+flatOrders.t2()+flatOrders.t3())
+                        .timeWindowAll(Time.minutes(3))
+                        .allowedLateness(Time.minutes(1))
                         .aggregate( new MyAggregator());
 
         // publish it  to the out stream.
         aggregateStream.addSink(producer);
 
-
         // Consume it from the out stream to print running totals.
-
         FlinkKafkaConsumer010<Tuple4<String,String,String,Integer>> consumer2 = new FlinkKafkaConsumer010<Tuple4<String,String,String,Integer>>(OUT_TOPIC,
                 new TupleDeserializationSchema()
                 , props);
@@ -130,7 +130,5 @@ public class KafkaOrderAssignment extends ExerciseBase {
         //System.out.print("readBackOrdersGrpBy");
         //printOrTest(readBackOrdersGrpBy);
         env.execute("kafkaOrders for Srini Assignment1 namespace");
-
-
     }
 }
