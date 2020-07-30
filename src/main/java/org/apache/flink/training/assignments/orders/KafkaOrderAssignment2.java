@@ -1,34 +1,31 @@
 package org.apache.flink.training.assignments.orders;
 
 import akka.japi.tuple.Tuple4;
-import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.api.common.functions.FlatMapFunction;
-import org.apache.flink.streaming.api.windowing.time.Time;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
+import org.apache.flink.streaming.api.windowing.time.Time;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer010;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaProducer010;
 import org.apache.flink.training.assignments.domain.Allocation;
 import org.apache.flink.training.assignments.domain.BuySell;
 import org.apache.flink.training.assignments.domain.Order;
-import org.apache.flink.training.assignments.functions.AssignmentGroupBy;
 import org.apache.flink.training.assignments.functions.MyAggregator;
-import org.apache.flink.training.assignments.functions.MyWaterMarkAssigner;
 import org.apache.flink.training.assignments.serializers.OrderDeserializationSchema;
-import org.apache.flink.training.assignments.serializers.OrderSerializationSchema;
 import org.apache.flink.training.assignments.serializers.TupleDeserializationSchema;
 import org.apache.flink.training.assignments.serializers.TupleSerializationSchema;
-import org.apache.flink.training.assignments.serializers.TupleDeserializationSchema;
 import org.apache.flink.training.assignments.utils.ExerciseBase;
 import org.apache.flink.training.assignments.utils.PropReader;
 import org.apache.flink.util.Collector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.FileInputStream;
-import java.io.InputStream;
-import java.time.Duration;
+import javax.naming.Context;
 import java.util.Properties;
 
 
@@ -43,9 +40,9 @@ with your kafka cluster URL: kafka.dest.rlewis.wsn.riskfocus.com:9092
 5. Write the data to Kafka topic “demo-output”
  */
 
-public class KafkaOrderAssignment extends ExerciseBase {
+public class KafkaOrderAssignment2 extends ExerciseBase {
 
-    private static final Logger LOG = LoggerFactory.getLogger(KafkaOrderAssignment.class);
+    private static final Logger LOG = LoggerFactory.getLogger(KafkaOrderAssignment2.class);
 
     public static final String KAFKA_ADDRESS = "kafka.dest.srini.wsn.riskfocus.com:9092";
     public static final String IN_TOPIC = "in";
@@ -112,25 +109,35 @@ public class KafkaOrderAssignment extends ExerciseBase {
         //System.out.print("flatmapStream");
         printOrTest(flatmapStream);
         // Why window by 1 hour, assuming we have an hourly job to print running totals of held positions.
-        DataStream<Tuple4<String, String, String, Integer>> aggregateStream =
-                        flatmapStream.timeWindowAll(Time.minutes(3)).allowedLateness(Time.minutes(1))
-                        .aggregate( new MyAggregator());
+        DataStream<Tuple4<String, String,String, Integer>> processStream =
+                                flatmapStream
+                                        .keyBy((Tuple4<String, String, String, Integer> flatOrder) -> flatOrder.t1())
+                                        .window(TumblingEventTimeWindows.of(Time.hours(1)))
+                                        .process(new GroupByAccount());
+
 
         // publish it  to the out stream.
-        aggregateStream.addSink(producer);
+        processStream.addSink(producer);
 
-
-        // Consume it from the out stream to print running totals.
-
-        FlinkKafkaConsumer010<Tuple4<String,String,String,Integer>> consumer2 = new FlinkKafkaConsumer010<Tuple4<String,String,String,Integer>>(OUT_TOPIC,
-                new TupleDeserializationSchema()
-                , props);
-
-        DataStream<Tuple4<String,String,String,Integer>> readBackOrdersGrpBy = env.addSource(consumer2);
-        //System.out.print("readBackOrdersGrpBy");
-        //printOrTest(readBackOrdersGrpBy);
         env.execute("kafkaOrders for Srini Assignment1 namespace");
 
 
+    }
+    /*
+     * Wraps the pre-aggregated result into a tuple along with the window's timestamp and key.
+     */
+    public static class GroupByAccount extends ProcessWindowFunction<
+                 Tuple4<String,String,String,Integer>,Tuple4<String,String,String,Integer>, String, TimeWindow> {
+
+        @Override
+        public void process(String key, Context context, Iterable<Tuple4<String,String,String,Integer>> flatOrders,
+                            Collector<Tuple4<String,String,String,Integer>> out) {
+            int sumOfQty = 0;
+            for (Tuple4<String,String,String,Integer> f : flatOrders) {
+                sumOfQty += f.t4();
+                out.collect(new Tuple4<>(f.t1(),f.t2(),f.t3(),sumOfQty));
+            }
+
+        }
     }
 }
