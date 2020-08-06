@@ -1,36 +1,31 @@
 package org.apache.flink.training.assignments.orders;
 
-import akka.japi.tuple.Tuple4;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.TimeCharacteristic;
-import org.apache.flink.streaming.api.TimerService;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.co.KeyedCoProcessFunction;
-import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
-import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
-import org.apache.flink.streaming.api.windowing.time.Time;
-import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer010;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaProducer010;
-import org.apache.flink.training.assignments.domain.Allocation;
-import org.apache.flink.training.assignments.domain.BuySell;
-import org.apache.flink.training.assignments.domain.Order;
+import org.apache.flink.training.assignments.domain.*;
+import org.apache.flink.training.assignments.functions.BoundedOutOfOrdernessGenerator;
+import org.apache.flink.training.assignments.functions.GroupByCusip;
+import org.apache.flink.training.assignments.functions.GroupByKey;
+import org.apache.flink.training.assignments.functions.SymbolTimestampGenerator;
+import org.apache.flink.training.assignments.serializers.FlatOrderSerializationSchema;
+import org.apache.flink.training.assignments.serializers.FlatSymbolOrderSerializationSchema;
 import org.apache.flink.training.assignments.serializers.OrderDeserializationSchema;
-import org.apache.flink.training.assignments.serializers.TupleSerializationSchema;
 import org.apache.flink.training.assignments.utils.ExerciseBase;
 import org.apache.flink.training.assignments.utils.PropReader;
 import org.apache.flink.util.Collector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
-import org.apache.flink.streaming.api.functions.KeyedProcessFunction.Context;
-import org.apache.flink.streaming.api.functions.KeyedProcessFunction.OnTimerContext;
+
 import java.util.Properties;
+
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
-import scala.Int;
 
 /*
 Using the supplied order-generator.jar populate kafka topic
@@ -47,9 +42,10 @@ public class KafkaOrderAssignment3 extends ExerciseBase {
 
     private static final Logger LOG = LoggerFactory.getLogger(KafkaOrderAssignment3.class);
 
-    public static final String KAFKA_ADDRESS = "kafka.dest.srini.wsn.riskfocus.com:9092";
+    public static final String KAFKA_ADDRESS = "kafka.dest.srini-jenkins.wsn.riskfocus.com:9092";
     public static final String IN_TOPIC = "in";
-    public static final String OUT_TOPIC = "demo-output";
+    public static final String OUT_TOPIC = "positionsByAct";
+    public static final String OUT_TOPIC_1 = "positionsBySymbol";
     public static final String KAFKA_GROUP = "";
     public static Properties props = new Properties();
 
@@ -58,10 +54,9 @@ public class KafkaOrderAssignment3 extends ExerciseBase {
         // set up streaming execution environment
         var env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-        env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
-
         // Set to 1 for now
         env.setParallelism(1);
+        env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
         Properties props = new PropReader().getProps();
         props.setProperty("bootstrap.servers", KAFKA_ADDRESS);
         props.setProperty("group.id", KAFKA_GROUP);
@@ -73,47 +68,60 @@ public class KafkaOrderAssignment3 extends ExerciseBase {
                 , props);
 
         DataStream<Order> orderStream = env.addSource(consumer);
-        printOrTest(orderStream);
+        //printOrTest(orderStream);
         // create a Producer
-        FlinkKafkaProducer010<Tuple4<String, String, String, Integer>> producer =
-                new FlinkKafkaProducer010<Tuple4<String, String, String, Integer>>
+        FlinkKafkaProducer010<FlatOrder> producer =
+                new FlinkKafkaProducer010<FlatOrder>
                 (KAFKA_ADDRESS,
                 OUT_TOPIC,
-                new TupleSerializationSchema());
+                new FlatOrderSerializationSchema());
         producer.setWriteTimestampToKafka(true);
+
+        FlinkKafkaProducer010<FlatSymbolOrder> producer2 =
+                new FlinkKafkaProducer010<FlatSymbolOrder>
+                        (KAFKA_ADDRESS,
+                                OUT_TOPIC,
+                                new FlatSymbolOrderSerializationSchema());
+        producer2.setWriteTimestampToKafka(true);
 
         // Allocations are by Cusip, so keyBy Cusip.
         // flatten the structure by extracting allocations for account, sub account,cusip and quantity .
-        DataStream<Tuple4<String, String, String, Integer>> flatmapStream = env.addSource(consumer).keyBy("cusip")
+        DataStream<FlatOrder> flatmapStream = env.addSource(consumer).keyBy("cusip")
                 .flatMap(new FlatMapFunction<Order,
-                        Tuple4<String, String, String, Integer>>() {
+                        FlatOrder>() {
                     @Override
-                    public void flatMap(Order value, Collector<Tuple4<String, String, String, Integer>> out)
+                    public void flatMap(Order value, Collector<FlatOrder> out)
                             throws Exception {
                         for (Allocation allocation : value.getAllocations()) {
-                            out.collect(new Tuple4<String, String, String, Integer>(
-                                    value.getCusip(),
+                            out.collect(new FlatOrder(
+                                    value.getCusip(),(value.getBuySell() == BuySell.BUY ? allocation.getQuantity() : allocation.getQuantity() * -1),
                                     allocation.getAccount(),
-                                    allocation.getSubAccount(),
-                                    (value.getBuySell() == BuySell.BUY ? allocation.getQuantity() : allocation.getQuantity() * -1)));
+                                    allocation.getSubAccount()
+                                    ));
                                     // consider Sell accounts as negative qty
                         }
                     }
-                });
+                }).assignTimestampsAndWatermarks(new BoundedOutOfOrdernessGenerator());
 
-        printOrTest(flatmapStream);
-        // Why window by 1 hour, assuming we have an hourly job to print running totals of held positions.
-        DataStream<Tuple4<String, String,String, Integer>> processStream =
+        //printOrTest(flatmapStream);
+        DataStream<FlatOrder> processStream =
                                 flatmapStream
-                                        .keyBy((Tuple4<String, String, String, Integer> flatOrder) ->
-                                                flatOrder.t1()+flatOrder.t2()+flatOrder.t3()) // Key is a combination of Cusip,Acct,Sub.
+                                        .keyBy( flatOrder -> new CompositeKey(flatOrder.getCusip(),flatOrder.getAccount(),flatOrder.getSubAccount())) // Key is a combination of Cusip,Acct,Sub.
                                         .process(new GroupByKey());
 
-
+        //printOrTest(processStream);
         // publish it  to the out stream.
         processStream.addSink(producer);
+        printOrTest(processStream);
 
-        //env.execute("kafkaOrders for Srini Assignment3 namespace");
+
+        // Task # 2 : PositionBySymbol
+        DataStream<FlatSymbolOrder> symbolStream = processStream
+                        .keyBy( flatSymbolOrder -> flatSymbolOrder.getCusip())
+                        .process(new GroupByCusip());
+        symbolStream.addSink(producer2);
+        printOrTest(symbolStream);
+        env.execute("kafkaOrders for Srini Assignment- task#1 namespace");
 
 
     }
@@ -128,62 +136,4 @@ public class KafkaOrderAssignment3 extends ExerciseBase {
         public String cusip;
         public long  lastModified;
     }
-
-
-    /*
-     * Wraps the pre-aggregated result into a tuple along with the window's timestamp and key.
-     */
-    public static class GroupByKey extends KeyedProcessFunction<String,
-                     Tuple4<String,String,String,Integer>,Tuple4<String,String,String,Integer>> {
-        /** The state that is maintained by this process function */
-        private ValueState<CountWithTimestamp> state;
-
-        @Override
-        public void open(Configuration config) throws Exception {
-            state = getRuntimeContext().getState(new ValueStateDescriptor<>("myState", CountWithTimestamp.class));
-        }
-
-        @Override
-        public void processElement(Tuple4<String, String, String, Integer> value, Context context,
-                                   Collector<Tuple4<String, String, String, Integer>> out) throws Exception {
-            // retrieve the current count
-            CountWithTimestamp current = state.value();
-            if (current == null) {
-                current = new CountWithTimestamp();
-                current.cusip = value.t1();
-                current.account = value.t2();
-                current.subaccount = value.t3();
-            }
-            // Qty gets added ..
-            current.qty += value.t4();
-
-            // set the state's timestamp to the record's assigned event time timestamp
-            current.lastModified = context.timestamp();
-
-            // write the state back
-            state.update(current);
-            // how do we know the stream has ended to return the rolling sum.
-            out.collect(new Tuple4<>(current.cusip,current.account,current.subaccount,current.qty));
-            // why do we no timer needed for this implementation.
-            //context.timerService().registerEventTimeTimer(current.lastModified + 60000);
-        }
-
-        @Override
-        public void onTimer(long timestamp, OnTimerContext context, Collector<Tuple4<String, String, String, Integer>> out)
-                throws Exception {
-
-            // get the state for the key that scheduled the timer
-            CountWithTimestamp result = state.value();
-
-            // check if this is an outdated timer or the latest timer
-            if (timestamp == result.lastModified + 60000) {
-                // emit the state on timeout
-                out.collect(new Tuple4<String, String,String, Integer>(result.cusip,result.account,result.subaccount,result.qty));
-            }
-        }
-
-
-            //out.collect(new Tuple4<>(context.f.t1(),f.t2(),f.t3(),sumOfQty));
-
-        }
     }
