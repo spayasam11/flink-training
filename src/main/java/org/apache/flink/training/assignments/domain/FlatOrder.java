@@ -42,7 +42,7 @@ public class FlatOrder extends IncomingEvent {
         this.quantity = quantity;
         this.account = account;
         this.subAccount = subAccount;
-        super.setTimestamp(System.currentTimeMillis()-1000);
+        super.setTimestamp(System.currentTimeMillis());
     }
 
     public FlatOrder() {

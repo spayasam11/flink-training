@@ -28,7 +28,7 @@ public class Order extends IncomingEvent {
         this.quantity = quantity;
         this.orderTime = orderTime;
         this.allocations = allocations;
-        super.setTimestamp(System.currentTimeMillis()-5000);
+        super.setTimestamp(System.currentTimeMillis()-1000);
     }
 
     public Order() {

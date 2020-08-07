@@ -1,26 +1,20 @@
 package org.apache.flink.training.assignments.orders;
 
 import akka.japi.tuple.Tuple4;
-import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.api.common.functions.FlatMapFunction;
-import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.AssignerWithPunctuatedWatermarks;
 import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
 import org.apache.flink.streaming.api.watermark.Watermark;
-import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
-import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer010;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaProducer010;
 import org.apache.flink.training.assignments.domain.Allocation;
 import org.apache.flink.training.assignments.domain.BuySell;
 import org.apache.flink.training.assignments.domain.Order;
-import org.apache.flink.training.assignments.functions.MyAggregator;
 import org.apache.flink.training.assignments.serializers.OrderDeserializationSchema;
-import org.apache.flink.training.assignments.serializers.TupleDeserializationSchema;
 import org.apache.flink.training.assignments.serializers.TupleSerializationSchema;
 import org.apache.flink.training.assignments.utils.ExerciseBase;
 import org.apache.flink.training.assignments.utils.PropReader;
@@ -29,7 +23,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
-import javax.naming.Context;
 import java.time.ZoneId;
 import java.util.Properties;
 
@@ -96,8 +89,8 @@ public class KafkaOrderAssignment2 extends ExerciseBase {
                         for (Allocation allocation : value.getAllocations()) {
                             out.collect(new Tuple4<String, String, String, Integer>(
                                     value.getCusip(),
-                                    allocation.getAccount(),
-                                    allocation.getSubAccount(),
+                                    allocation.getSubAccount().getAccount(),
+                                    allocation.getSubAccount().getSubAccount(),
                                     (value.getBuySell() == BuySell.BUY ? allocation.getQuantity() : allocation.getQuantity() * -1)));
                                     // consider Sell accounts as negative
                         }

@@ -45,7 +45,7 @@ public class GroupByCusip extends KeyedProcessFunction<String,
         // how do we know the stream has ended to return the rolling sum.
         //out.collect(new Tuple4<>(current.cusip,current.account,current.subaccount,current.qty));
         // why do we no timer needed for this implementation.
-        context.timerService().registerEventTimeTimer(current.lastModified + 1000);
+        context.timerService().registerEventTimeTimer(current.lastModified + 5000);
     }
 
     @Override
@@ -57,7 +57,7 @@ public class GroupByCusip extends KeyedProcessFunction<String,
         KafkaOrderAssignment3.CountWithTimestamp result = state.value();
         //System.out.println("result.lastModified + 6000"+result.lastModified + 5000);
         // check if this is an outdated timer or the latest timer
-        if (timestamp == result.lastModified + 1000) {
+        if (timestamp == result.lastModified + 5000) {
             // emit the state on timeout
             out.collect(new FlatSymbolOrder(result.cusip,result.qty));
         }

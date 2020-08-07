@@ -86,7 +86,7 @@ public class KafkaOrderAssignment6 extends ExerciseBase {
                             throws Exception {
                         for (Allocation allocation : value.getAllocations()) {
                             out.collect(new Tuple2<String, Integer>(
-                                    (value.getCusip() + "|" + allocation.getAccount() + "|" + allocation.getSubAccount()),
+                                    (value.getCusip() + "|" + allocation.getSubAccount() + "|" + allocation.getSubAccount()),
                                     (value.getBuySell() == BuySell.BUY ? allocation.getQuantity() : allocation.getQuantity() * -1)));
                         }
                     }

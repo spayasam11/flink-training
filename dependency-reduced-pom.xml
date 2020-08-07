@@ -92,7 +92,7 @@
               </filters>
               <transformers>
                 <transformer>
-                  <mainClass>org.apache.flink.training.assignments.orders.KafkaOrderAssignment</mainClass>
+                  <mainClass>org.apache.flink.training.assignments.orders.KafkaOrderAssignment3</mainClass>
                 </transformer>
               </transformers>
             </configuration>
@@ -157,6 +157,12 @@
           <groupId>org.junit.jupiter</groupId>
         </exclusion>
       </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
+      <version>1.18.12</version>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
   <properties>
