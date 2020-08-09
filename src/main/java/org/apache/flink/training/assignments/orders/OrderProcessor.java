@@ -108,7 +108,30 @@ public class OrderProcessor extends ExerciseBase {
                   .process(new AddQty());
         flatmapStream.addSink(producer2);
         printOrTest(flatmapStream);
+
         // Task # 2 : PositionBySymbol
+        DataStream<FlatCompositeOrder> flatCompositeMapStream = orderStream.keyBy(order -> order.getCusip())
+                .flatMap(new FlatMapFunction<Order,
+                        FlatOrder>() {
+                    @Override
+                    public void flatMap(Order value, Collector<FlatOrder> out)
+                            throws Exception {
+                        for (Allocation allocation : value.getAllocations()) {
+                            out.collect(new FlatOrder(
+                                    value.getCusip(), (value.getBuySell() == BuySell.BUY ? allocation.getQuantity() : allocation.getQuantity() * -1),
+                                    allocation.getSubAccount().getAccount(),
+                                    allocation.getSubAccount().getSubAccount()
+                            ));
+                            // consider Sell accounts as negative qty
+                        }
+                    }
+                }).assignTimestampsAndWatermarks(new BoundedOutOfOrdernessGenerator())
+                .keyBy(flatOrder -> new CompositeKey( flatOrder.getCusip(),flatOrder.getAccount(),flatOrder.getSubAccount()))
+                .window(TumblingEventTimeWindows.of(Time.minutes(1)))
+                .allowedLateness(Time.seconds(10))
+                .process(new AddQtyByKey());
+            printOrTest(flatCompositeMapStream);
+        //flatmapStream.addSink(producer3);
        /* DataStream<FlatSymbolOrder> symbolStream = processStream
                 .keyBy(flatSymbolOrder -> flatSymbolOrder.getCusip())
                 .process(new GroupByCusip());
@@ -157,8 +180,24 @@ public class OrderProcessor extends ExerciseBase {
             for (FlatOrder f : orders) {
                 qty += f.getQuantity();
             }
-            System.out.println("key, qty" + key+ qty);
+            //System.out.println("key, qty" + key+ qty);
             out.collect(new FlatSymbolOrder(key, qty));
+        }
+    }
+
+    /*
+     * Wraps the pre-aggregated result .
+     */
+    public static class AddQtyByKey extends ProcessWindowFunction<
+            FlatOrder, FlatCompositeOrder, CompositeKey, TimeWindow> {
+        @Override
+        public void process(CompositeKey key, Context context, Iterable<FlatOrder> orders, Collector<FlatCompositeOrder> out)
+                throws Exception {
+            int qty = 0;
+            for (FlatOrder f : orders) {
+                qty += f.getQuantity();
+            }
+            out.collect(new FlatCompositeOrder(key.getCusip(),qty, key.getAccount(),key.getSubAccount()));
         }
     }
 
