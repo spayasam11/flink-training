@@ -1,17 +1,13 @@
 package org.apache.flink.training.assignments.orders;
-import org.apache.flink.api.common.functions.FlatMapFunction;
-import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer010;
-import org.apache.flink.streaming.connectors.kafka.FlinkKafkaProducer010;
 import org.apache.flink.training.assignments.domain.*;
 import org.apache.flink.training.assignments.functions.*;
 import org.apache.flink.training.assignments.serializers.*;
 import org.apache.flink.training.assignments.utils.ExerciseBase;
 import org.apache.flink.training.assignments.utils.PropReader;
-import org.apache.flink.util.Collector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,9 +24,9 @@ with your kafka cluster URL: kafka.dest.rlewis.wsn.riskfocus.com:9092
 5. Write the data to Kafka topic “demo-output”
  */
 
-public class KafkaPriceAssignment extends ExerciseBase {
+public class PriceProcessor extends ExerciseBase {
 
-    private static final Logger LOG = LoggerFactory.getLogger(KafkaPriceAssignment.class);
+    private static final Logger LOG = LoggerFactory.getLogger(PriceProcessor.class);
 
     public static final String KAFKA_ADDRESS = "kafka.dest.srini-jenkins.wsn.riskfocus.com:9092";
     public static final String KAFKA_GROUP = "";

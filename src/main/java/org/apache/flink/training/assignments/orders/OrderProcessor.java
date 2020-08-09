@@ -1,21 +1,20 @@
 package org.apache.flink.training.assignments.orders;
 
 import org.apache.flink.api.common.functions.FlatMapFunction;
-import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
+import org.apache.flink.streaming.api.windowing.time.Time;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer010;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaProducer010;
 import org.apache.flink.training.assignments.domain.*;
 import org.apache.flink.training.assignments.functions.BoundedOutOfOrdernessGenerator;
-import org.apache.flink.training.assignments.functions.BoundedOutOfPriceGenerator;
-import org.apache.flink.training.assignments.functions.GroupByCusip;
-import org.apache.flink.training.assignments.functions.GroupByKey;
 import org.apache.flink.training.assignments.serializers.FlatOrderSerializationSchema;
 import org.apache.flink.training.assignments.serializers.FlatSymbolOrderSerializationSchema;
 import org.apache.flink.training.assignments.serializers.OrderDeserializationSchema;
-import org.apache.flink.training.assignments.serializers.PriceDeserializationSchema;
 import org.apache.flink.training.assignments.utils.ExerciseBase;
 import org.apache.flink.training.assignments.utils.PropReader;
 import org.apache.flink.util.Collector;
@@ -35,9 +34,9 @@ with your kafka cluster URL: kafka.dest.rlewis.wsn.riskfocus.com:9092
 5. Write the data to Kafka topic “demo-output”
  */
 
-public class KafkaOrderAssignment3 extends ExerciseBase {
+public class OrderProcessor extends ExerciseBase {
 
-    private static final Logger LOG = LoggerFactory.getLogger(KafkaOrderAssignment3.class);
+    private static final Logger LOG = LoggerFactory.getLogger(OrderProcessor.class);
 
     public static final String KAFKA_ADDRESS = "kafka.dest.srini-jenkins.wsn.riskfocus.com:9092";
     public static final String IN_TOPIC = "in";
@@ -46,6 +45,8 @@ public class KafkaOrderAssignment3 extends ExerciseBase {
     public static final String KAFKA_GROUP = "";
     public static final String IN_TOPIC_1 = "price";
     public static Properties props = new Properties();
+    final int maxEventDelay = 60;       // events are out of order by max 2 minutes
+    final int servingSpeedFactor = 1000; // events of 10 minutes are served in 1 second
 
     public static void main(String[] args) throws Exception {
 
@@ -66,7 +67,8 @@ public class KafkaOrderAssignment3 extends ExerciseBase {
                 , props);
 
         DataStream<Order> orderStream = env.addSource(consumer);
-        //printOrTest(orderStream);
+        //consumer.setStartFromTimestamp(System.currentTimeMillis());
+        printOrTest(orderStream);
         // create a Producer
         FlinkKafkaProducer010<FlatOrder> producer =
                 new FlinkKafkaProducer010<FlatOrder>
@@ -84,7 +86,7 @@ public class KafkaOrderAssignment3 extends ExerciseBase {
 
         // Allocations are by Cusip, so keyBy Cusip.
         // flatten the structure by extracting allocations for account, sub account,cusip and quantity .
-        DataStream<FlatSymbolOrder> flatmapStream = env.addSource(consumer).keyBy(order -> order.getCusip())
+        DataStream<FlatSymbolOrder> flatmapStream = orderStream.keyBy(order -> order.getCusip())
                 .flatMap(new FlatMapFunction<Order,
                         FlatOrder>() {
                     @Override
@@ -99,8 +101,12 @@ public class KafkaOrderAssignment3 extends ExerciseBase {
                             // consider Sell accounts as negative qty
                         }
                     }
-                }).assignTimestampsAndWatermarks(new BoundedOutOfOrdernessGenerator()).keyBy(flatOrder -> flatOrder.getCusip())
-                .process(new GroupByCusip());//;
+                }).assignTimestampsAndWatermarks(new BoundedOutOfOrdernessGenerator())
+                  .keyBy(flatOrder -> flatOrder.getCusip())
+                  .window(TumblingEventTimeWindows.of(Time.minutes(1)))
+                  .allowedLateness(Time.seconds(10))
+                  .process(new AddQty());
+        flatmapStream.addSink(producer2);
         printOrTest(flatmapStream);
         // Task # 2 : PositionBySymbol
        /* DataStream<FlatSymbolOrder> symbolStream = processStream
@@ -139,4 +145,21 @@ public class KafkaOrderAssignment3 extends ExerciseBase {
         public String cusip;
         public long  lastModified;
     }
+    /*
+     * Wraps the pre-aggregated result .
+     */
+    public static class AddQty extends ProcessWindowFunction<
+                FlatOrder, FlatSymbolOrder, String, TimeWindow> {
+        @Override
+        public void process(String key, Context context, Iterable<FlatOrder> orders, Collector<FlatSymbolOrder> out)
+                throws Exception {
+            int qty = 0;
+            for (FlatOrder f : orders) {
+                qty += f.getQuantity();
+            }
+            System.out.println("key, qty" + key+ qty);
+            out.collect(new FlatSymbolOrder(key, qty));
+        }
+    }
+
 }

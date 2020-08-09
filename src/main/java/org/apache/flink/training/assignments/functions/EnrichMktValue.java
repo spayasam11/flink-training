@@ -38,10 +38,7 @@ import java.math.BigDecimal;
         public void flatMap2(FlatSymbolOrder cusip, Collector<Position> out) throws Exception {
             Price price = prices.value();
             if (price != null ) {
-                out.collect(new Position(price.getCusip(),cusip.getAccount(),cusip.getSubAccount(),cusip.getQuantity(),
-                        price.getPrice().multiply(new BigDecimal(cusip.getQuantity())),0));
-            } else {
                 cusips.update(cusip);
-            }
+            }// get same price again can be ignored.
         }
     }

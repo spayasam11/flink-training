@@ -116,7 +116,7 @@ public class Order extends IncomingEvent {
 
     public String toString() {
         String var10000 = this.getOrderId();
-        return "Order(orderId=" + var10000 + ", cusip=" + this.getCusip() + ", assetType=" + this.getAssetType() + ", buySell=" + this.getBuySell() + ", bidOffer=" + this.getBidOffer() + ", currency=" + this.getCurrency() + ", quantity=" + this.getQuantity() + ", orderTime=" + this.getOrderTime() + ", allocations=" + this.getAllocations() + ")";
+        return "Order(eos = " + isEos() + ", orderId=" + var10000 + ", cusip=" + this.getCusip() + ", assetType=" + this.getAssetType() + ", buySell=" + this.getBuySell() + ", bidOffer=" + this.getBidOffer() + ", currency=" + this.getCurrency() + ", quantity=" + this.getQuantity() + ", orderTime=" + this.getOrderTime() + ", allocations=" + this.getAllocations() + ")";
     }
 
     @Override
@@ -209,7 +209,7 @@ public class Order extends IncomingEvent {
         }
 
         public String toString() {
-            return "Order.OrderBuilder(orderId=" + this.orderId + ", cusip=" + this.cusip + ", assetType=" + this.assetType + ", buySell=" + this.buySell + ", bidOffer=" + this.bidOffer + ", currency=" + this.currency + ", quantity=" + this.quantity + ", orderTime=" + this.orderTime + ", allocations=" + this.allocations + ")";
+            return "Order.OrderBuilder(eos = " + "orderId=" + this.orderId + ", cusip=" + this.cusip + ", assetType=" + this.assetType + ", buySell=" + this.buySell + ", bidOffer=" + this.bidOffer + ", currency=" + this.currency + ", quantity=" + this.quantity + ", orderTime=" + this.orderTime + ", allocations=" + this.allocations + ")";
         }
     }
 }

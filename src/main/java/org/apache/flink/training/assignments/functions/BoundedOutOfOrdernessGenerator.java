@@ -11,7 +11,7 @@ import org.apache.flink.training.assignments.domain.FlatOrder;
  */
 public class BoundedOutOfOrdernessGenerator implements AssignerWithPeriodicWatermarks<FlatOrder> {
 
-    private final long maxOutOfOrderness = 3000; // 3.5 seconds
+    private final long maxOutOfOrderness = 6000; // 1 minute
 
     private long currentMaxTimestamp;
 
@@ -20,13 +20,16 @@ public class BoundedOutOfOrdernessGenerator implements AssignerWithPeriodicWater
         long timestamp = System.currentTimeMillis()-5000;//element.getTimestamp();
         previousElementTimestamp = previousElementTimestamp-5000;
         //System.out.println("verify timestamp" + timestamp + " "+previousElementTimestamp);
-        currentMaxTimestamp = Math.max(timestamp, currentMaxTimestamp);
+        //currentMaxTimestamp = Math.max(timestamp, currentMaxTimestamp);
         return timestamp;
+        //return element.getTimeStamp() ==0 ? System.currentTimeMillis() : element.getTimeStamp();
     }
 
     @Override
     public Watermark getCurrentWatermark() {
         // return the watermark as current highest timestamp minus the out-of-orderness bound
-        return new Watermark(currentMaxTimestamp - maxOutOfOrderness);
+        return new Watermark(System.currentTimeMillis());
+        //return new Watermark(currentMaxTimestamp - maxOutOfOrderness);
+
     }
 }
