@@ -68,7 +68,7 @@ public class OrderProcessor extends ExerciseBase {
 
         DataStream<Order> orderStream = env.addSource(consumer);
         //consumer.setStartFromTimestamp(System.currentTimeMillis());
-        printOrTest(orderStream);
+       // printOrTest(orderStream);
         // create a Producer
         FlinkKafkaProducer010<FlatOrder> producer =
                 new FlinkKafkaProducer010<FlatOrder>

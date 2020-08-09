@@ -34,6 +34,18 @@ public class Position {
     }
 
     @Override
+    public String toString() {
+        return "Position{" +
+                "cusip='" + cusip + '\'' +
+                ", account='" + account + '\'' +
+                ", subAccount='" + subAccount + '\'' +
+                ", quantity=" + quantity +
+                ", mktVal=" + mktVal +
+                ", orderId=" + orderId +
+                '}';
+    }
+
+    @Override
     public int hashCode() {
         return Objects.hash(cusip, account, subAccount, quantity, mktVal, orderId);
     }

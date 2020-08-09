@@ -63,10 +63,10 @@ public class PriceProcessor extends ExerciseBase {
                 //.assignTimestampsAndWatermarks(new BoundedOutOfPriceGenerator());
         printOrTest(flatSymbolPrices);
 
-        flatmapPrices.keyBy(pr -> pr.getCusip())
+        DataStream<Position> pos =  flatmapPrices.keyBy(pr -> pr.getCusip())
         .connect(flatSymbolPrices.keyBy(fsp -> fsp.getCusip()))
         .flatMap(new EnrichMktValue());
-
+        printOrTest(pos);
 
         env.execute("kafkaOrders for Srini Assignment- task#2 namespace");
     }
