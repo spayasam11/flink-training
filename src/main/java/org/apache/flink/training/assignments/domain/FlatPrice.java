@@ -9,6 +9,9 @@ public class FlatPrice {
     private String cusip;
     private BigDecimal price;
 
+    public FlatPrice() {
+    }
+
     public FlatPrice(String cusip, BigDecimal price) {
         this.cusip = cusip;
         this.price = price;

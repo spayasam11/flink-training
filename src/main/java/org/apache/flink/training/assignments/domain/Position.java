@@ -11,6 +11,9 @@ public class Position {
     BigDecimal mktVal;
       int orderId;
 
+    public Position() {
+    }
+
     public Position(String cusip, String account, String subAccount, int quantity, BigDecimal mktVal, int orderId) {
         this.cusip = cusip;
         this.account = account;

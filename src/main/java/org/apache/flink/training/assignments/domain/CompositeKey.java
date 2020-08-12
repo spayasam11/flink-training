@@ -9,6 +9,9 @@ public class CompositeKey {
         this.subAccount = subAccount;
     }
 
+    public CompositeKey() {
+    }
+
     protected String cusip;
     protected String account;
     protected String subAccount;

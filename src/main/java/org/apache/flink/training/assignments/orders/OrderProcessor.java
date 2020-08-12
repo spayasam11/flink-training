@@ -12,6 +12,7 @@ import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer010;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaProducer010;
 import org.apache.flink.training.assignments.domain.*;
 import org.apache.flink.training.assignments.functions.BoundedOutOfOrdernessGenerator;
+import org.apache.flink.training.assignments.serializers.FlatCompositeOrderSerializationSchema;
 import org.apache.flink.training.assignments.serializers.FlatOrderSerializationSchema;
 import org.apache.flink.training.assignments.serializers.FlatSymbolOrderSerializationSchema;
 import org.apache.flink.training.assignments.serializers.OrderDeserializationSchema;
@@ -45,11 +46,8 @@ public class OrderProcessor extends ExerciseBase {
     public static final String KAFKA_GROUP = "";
     public static final String IN_TOPIC_1 = "price";
     public static Properties props = new Properties();
-    final int maxEventDelay = 60;       // events are out of order by max 2 minutes
-    final int servingSpeedFactor = 1000; // events of 10 minutes are served in 1 second
 
     public static void main(String[] args) throws Exception {
-
         // set up streaming execution environment
         var env = StreamExecutionEnvironment.getExecutionEnvironment();
 
@@ -59,6 +57,7 @@ public class OrderProcessor extends ExerciseBase {
         Properties props = new PropReader().getProps();
         props.setProperty("bootstrap.servers", KAFKA_ADDRESS);
         props.setProperty("group.id", KAFKA_GROUP);
+        //env.enableCheckpointing(50000);
 
         // Extra credit: How would you use KafkaDeserializationSchema instead?
         // Create tbe Kafka Consumer here
@@ -66,10 +65,9 @@ public class OrderProcessor extends ExerciseBase {
                 new OrderDeserializationSchema()
                 , props);
 
-        DataStream<Order> orderStream = env.addSource(consumer);
-        //consumer.setStartFromTimestamp(System.currentTimeMillis());
-       // printOrTest(orderStream);
-        // create a Producer
+        DataStream<Order> orderStream = env.addSource(consumer).name("Subscribe Trades/Orders").uid("Subscribe Trades/Orders");
+        // printOrTest(orderStream);
+        // create a Producer for positionsByAct
         FlinkKafkaProducer010<FlatOrder> producer =
                 new FlinkKafkaProducer010<FlatOrder>
                         (KAFKA_ADDRESS,
@@ -77,16 +75,17 @@ public class OrderProcessor extends ExerciseBase {
                                 new FlatOrderSerializationSchema());
         producer.setWriteTimestampToKafka(true);
 
-        FlinkKafkaProducer010<FlatSymbolOrder> producer2 =
-                new FlinkKafkaProducer010<FlatSymbolOrder>
+        //// create a Producer for positionsBySymbol
+        FlinkKafkaProducer010<FlatOrder> producer2 =
+                new FlinkKafkaProducer010<FlatOrder>
                         (KAFKA_ADDRESS,
                                 OUT_TOPIC_1,
-                                new FlatSymbolOrderSerializationSchema());
+                                new FlatOrderSerializationSchema());
         producer2.setWriteTimestampToKafka(true);
 
         // Allocations are by Cusip, so keyBy Cusip.
         // flatten the structure by extracting allocations for account, sub account,cusip and quantity .
-        DataStream<FlatSymbolOrder> flatmapStream = orderStream.keyBy(order -> order.getCusip())
+        DataStream<FlatOrder> flatmapStream = orderStream.keyBy(order -> order.getOrderId())
                 .flatMap(new FlatMapFunction<Order,
                         FlatOrder>() {
                     @Override
@@ -95,22 +94,22 @@ public class OrderProcessor extends ExerciseBase {
                         for (Allocation allocation : value.getAllocations()) {
                             out.collect(new FlatOrder(
                                     value.getCusip(), (value.getBuySell() == BuySell.BUY ? allocation.getQuantity() : allocation.getQuantity() * -1),
-                                    allocation.getSubAccount().getAccount(),
+                                    allocation.getSubAccount().getAccount(), // consider Sell accounts as negative qty
                                     allocation.getSubAccount().getSubAccount()
                             ));
-                            // consider Sell accounts as negative qty
                         }
                     }
-                }).assignTimestampsAndWatermarks(new BoundedOutOfOrdernessGenerator())
+                }).name("flatten the orders").uid("flatten the orders").assignTimestampsAndWatermarks(new BoundedOutOfOrdernessGenerator())
                   .keyBy(flatOrder -> flatOrder.getCusip())
                   .window(TumblingEventTimeWindows.of(Time.minutes(1)))
                   .allowedLateness(Time.seconds(10))
-                  .process(new AddQty());
-        flatmapStream.addSink(producer2);
-        printOrTest(flatmapStream);
+                  .sum("quantity").name(" Aggregate Quantity By Cusip/Symbol").uid("Aggregate Quantity By Cusip/Symbol");
+                  //.process(new AddQty()).name(" Aggregate Quantity By Cusip/Symbol").uid("Aggregate Quantity By Cusip/Symbol");
+        flatmapStream.addSink(producer2).name(" Publish to positionsBySymbol").uid("Publish to positionsBySymbol");// publish to positionsBySymbol.
+        //printOrTest(flatmapStream);
 
-        // Task # 2 : PositionBySymbol
-        DataStream<FlatCompositeOrder> flatCompositeMapStream = orderStream.keyBy(order -> order.getCusip())
+        // Task # 2 : PositionByAccount
+        DataStream<FlatOrder> flatCompositeMapStream = orderStream.keyBy(order -> order.getOrderId())
                 .flatMap(new FlatMapFunction<Order,
                         FlatOrder>() {
                     @Override
@@ -118,44 +117,25 @@ public class OrderProcessor extends ExerciseBase {
                             throws Exception {
                         for (Allocation allocation : value.getAllocations()) {
                             out.collect(new FlatOrder(
-                                    value.getCusip(), (value.getBuySell() == BuySell.BUY ? allocation.getQuantity() : allocation.getQuantity() * -1),
+                                    value.getCusip(), (value.getBuySell() ==
+                                                        BuySell.BUY ? allocation.getQuantity() :
+                                                        allocation.getQuantity() * -1),
                                     allocation.getSubAccount().getAccount(),
                                     allocation.getSubAccount().getSubAccount()
                             ));
                             // consider Sell accounts as negative qty
                         }
                     }
-                }).assignTimestampsAndWatermarks(new BoundedOutOfOrdernessGenerator())
+                }).assignTimestampsAndWatermarks(new BoundedOutOfOrdernessGenerator()).name("Assign Watermarks").uid("Assign Watermarks")
                 .keyBy(flatOrder -> new CompositeKey( flatOrder.getCusip(),flatOrder.getAccount(),flatOrder.getSubAccount()))
-                .window(TumblingEventTimeWindows.of(Time.minutes(1)))
+                .window(TumblingEventTimeWindows.of(Time.minutes(3)))
                 .allowedLateness(Time.seconds(10))
-                .process(new AddQtyByKey());
+                .sum("quantity").name("Aggregate Qty by Cusip/Acct/Subacct Composite key").uid("Aggregate Qty by Cusip/Acct/Subacct Composite key");
+                //.process(new AddQtyByKey()).name(" Aggregate Qty by Cusip/Acct/Subacct Composite key").uid("Aggregate Qty by Cusip/Acct/Subacct Composite key");
             printOrTest(flatCompositeMapStream);
-        //flatmapStream.addSink(producer3);
-       /* DataStream<FlatSymbolOrder> symbolStream = processStream
-                .keyBy(flatSymbolOrder -> flatSymbolOrder.getCusip())
-                .process(new GroupByCusip());
+        flatCompositeMapStream.addSink(producer).name("Publish to positionsByAct").uid("Publish to positionsByAct");
 
-        DataStream<FlatSymbolOrder> symbolStream = flatmapStream
-                .keyBy(flatOrder -> flatOrder.getCusip())
-                .process(new GroupByCusip());
-        symbolStream.addSink(producer2);
-        printOrTest(symbolStream);
-
-     /*   //printOrTest(flatmapStream);
-        DataStream<FlatOrder> processStream =
-                flatmapStream
-                        .keyBy(flatOrder -> new CompositeKey(flatOrder.getCusip(), flatOrder.getAccount(), flatOrder.getSubAccount())) // Key is a combination of Cusip,Acct,Sub.
-                        .process(new GroupByKey());
-        */
-        //printOrTest(processStream);
-        // publish it  to the out stream.
-        //processStream.addSink(producer);
-       // printOrTest(processStream);
-
-
-
-        env.execute("kafkaOrders for Srini Assignment- task#1 namespace");
+        env.execute("Order Processor ");
     }
     /**
      * The data type stored in the state
@@ -169,7 +149,7 @@ public class OrderProcessor extends ExerciseBase {
         public long  lastModified;
     }
     /*
-     * Wraps the pre-aggregated result .
+     * Wraps the pre-aggregated result key By Cusip .
      */
     public static class AddQty extends ProcessWindowFunction<
                 FlatOrder, FlatSymbolOrder, String, TimeWindow> {
@@ -180,7 +160,6 @@ public class OrderProcessor extends ExerciseBase {
             for (FlatOrder f : orders) {
                 qty += f.getQuantity();
             }
-            //System.out.println("key, qty" + key+ qty);
             out.collect(new FlatSymbolOrder(key, qty));
         }
     }

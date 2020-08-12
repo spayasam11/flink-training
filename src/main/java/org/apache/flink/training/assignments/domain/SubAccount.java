@@ -9,6 +9,9 @@ public class SubAccount {
     private String benchmark;
     private String composedKey;
 
+    public SubAccount() {
+    }
+
     @Override
     public String toString() {
         return "Account{" +
