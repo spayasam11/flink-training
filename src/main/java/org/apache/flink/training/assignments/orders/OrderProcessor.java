@@ -52,7 +52,7 @@ public class OrderProcessor extends ExerciseBase {
         var env = StreamExecutionEnvironment.getExecutionEnvironment();
 
         // Set to 1 for now
-        env.setParallelism(1);
+        //env.setParallelism(1);
         env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
         Properties props = new PropReader().getProps();
         props.setProperty("bootstrap.servers", KAFKA_ADDRESS);
@@ -64,8 +64,8 @@ public class OrderProcessor extends ExerciseBase {
         FlinkKafkaConsumer010<Order> consumer = new FlinkKafkaConsumer010<Order>(IN_TOPIC,
                 new OrderDeserializationSchema()
                 , props);
-
-        DataStream<Order> orderStream = env.addSource(consumer).name("Subscribe Trades/Orders").uid("Subscribe Trades/Orders");
+        // uid - Grafana , name - flink.
+        DataStream<Order> orderStream = env.addSource(consumer).name("Subscribe Trades/Orders").uid("Subscribe_Trades_Orders");// .setParallelism(1)
         // printOrTest(orderStream);
         // create a Producer for positionsByAct
         FlinkKafkaProducer010<FlatOrder> producer =
@@ -85,12 +85,14 @@ public class OrderProcessor extends ExerciseBase {
 
         // Allocations are by Cusip, so keyBy Cusip.
         // flatten the structure by extracting allocations for account, sub account,cusip and quantity .
+        // Convert to RichFlatMap and add a guage maetric.
         DataStream<FlatOrder> flatmapStream = orderStream.keyBy(order -> order.getOrderId())
                 .flatMap(new FlatMapFunction<Order,
                         FlatOrder>() {
                     @Override
                     public void flatMap(Order value, Collector<FlatOrder> out)
                             throws Exception {
+                        long currentTime = System.currentTimeMillis();
                         for (Allocation allocation : value.getAllocations()) {
                             out.collect(new FlatOrder(
                                     value.getCusip(), (value.getBuySell() == BuySell.BUY ? allocation.getQuantity() : allocation.getQuantity() * -1),
@@ -98,12 +100,17 @@ public class OrderProcessor extends ExerciseBase {
                                     allocation.getSubAccount().getSubAccount()
                             ));
                         }
+                        long currentTimeLapsed = System.currentTimeMillis();
+
+
                     }
-                }).name("flatten the orders").uid("flatten the orders").assignTimestampsAndWatermarks(new BoundedOutOfOrdernessGenerator())
+                })//.setParallelism(4)
+                .name("flatten the orders").uid("flatten the orders").assignTimestampsAndWatermarks(new BoundedOutOfOrdernessGenerator())
                   .keyBy(flatOrder -> flatOrder.getCusip())
                   .window(TumblingEventTimeWindows.of(Time.minutes(1)))
                   .allowedLateness(Time.seconds(10))
                   .sum("quantity").name(" Aggregate Quantity By Cusip/Symbol").uid("Aggregate Quantity By Cusip/Symbol");
+                    // .setParallelism(4)
                   //.process(new AddQty()).name(" Aggregate Quantity By Cusip/Symbol").uid("Aggregate Quantity By Cusip/Symbol");
         flatmapStream.addSink(producer2).name(" Publish to positionsBySymbol").uid("Publish to positionsBySymbol");// publish to positionsBySymbol.
         //printOrTest(flatmapStream);

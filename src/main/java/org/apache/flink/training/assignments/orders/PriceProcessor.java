@@ -47,7 +47,7 @@ public class PriceProcessor extends ExerciseBase {
         var env = StreamExecutionEnvironment.getExecutionEnvironment();
 
         // Set to 1 for now
-        env.setParallelism(1);
+        //env.setParallelism(1);
         env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
         Properties props = new PropReader().getProps();
         props.setProperty("bootstrap.servers", KAFKA_ADDRESS);
