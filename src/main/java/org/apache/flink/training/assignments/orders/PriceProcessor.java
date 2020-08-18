@@ -52,6 +52,8 @@ public class PriceProcessor extends ExerciseBase {
         Properties props = new PropReader().getProps();
         props.setProperty("bootstrap.servers", KAFKA_ADDRESS);
         props.setProperty("group.id", KAFKA_GROUP);
+        //env.getConfig().setLatencyTrackingInterval(1000);
+        env.getConfig().setLatencyTrackingInterval(5L);
         //env.enableCheckpointing(50000);
 
         // Task 1 : Subscribe to Prices
@@ -62,7 +64,8 @@ public class PriceProcessor extends ExerciseBase {
         DataStream<Price> flatmapPrices = env.addSource(consumer1).name("Subscribe Prices").uid("Subscribe Prices")
                                           .keyBy(price -> price.getCusip())
                                           .assignTimestampsAndWatermarks(new BoundedOutOfPriceGenerator())
-                                          .name("Assign Watermarkes on recvd Prices .").uid("Assign Watermarkes on recvd Prices .");
+                                          .name("Assign Watermarkes on recvd Prices .").uid("Assign_Watermarks_On_Recvd_Prices .");
+        printOrTest(flatmapPrices);
 
         // Task 2 : Subscribe to FlatOrder topic
         FlinkKafkaConsumer010<FlatOrder> consumer2 = new FlinkKafkaConsumer010<FlatOrder>(IN_TOPIC_2,
@@ -74,7 +77,8 @@ public class PriceProcessor extends ExerciseBase {
         DataStream<Position> pos =  flatmapPrices.keyBy(pr -> pr.getCusip())
         .connect(flatSymbolPrices.keyBy(fsp -> fsp.getCusip()))
         .flatMap(new EnrichMktValue())
-                .name("Enrich Mkt Value ").uid("Enrich Mkt Value");
+                .name("Enrich Mkt Value ").uid("Enrich_Mkt_Value");
+        printOrTest(pos);
 
         // Create a Publisher for mktValueBySymbol.
         FlinkKafkaProducer010<Position> mvBySymbol =
@@ -84,11 +88,12 @@ public class PriceProcessor extends ExerciseBase {
                                 new PositionSerializationSchema());
         mvBySymbol.setWriteTimestampToKafka(true);
         pos.addSink(mvBySymbol);
+
         //mvBySymbol.setLogFailuresOnly(true);
         //mvBySymbol.setFlushOnCheckpoint(true);
         // logging
-        pos.addSink(new LogSink<>(LOG, LogSink.LoggerEnum.INFO, "PositionStream")).name("logging positions").uid("logging positions");
-        //printOrTest(pos);
+        pos.addSink(new LogSink<>(LOG, LogSink.LoggerEnum.INFO, "PositionStream")).name("logging positions")
+                .uid("logging_positions");
 
         // Task 3 : Subscribe to Composite Keys topic
         FlinkKafkaConsumer010<FlatOrder> consumer3 = new FlinkKafkaConsumer010<FlatOrder>(IN_TOPIC_3,
@@ -116,7 +121,7 @@ public class PriceProcessor extends ExerciseBase {
         // logging
         posByAcct.addSink(new LogSink<>(LOG, LogSink.LoggerEnum.DEBUG, "PositionByAccountStream"))
                 .name(" Log Positions By Symbol").uid("Test");
-        //printOrTest(posByAcct);
+        printOrTest(posByAcct);
         env.execute("Price Processor");
     }
 

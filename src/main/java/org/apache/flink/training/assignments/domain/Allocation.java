@@ -5,10 +5,71 @@ import java.util.Objects;
 
 public class Allocation implements Serializable {
     private static final long serialVersionUID = -887981985593847911L;
-    private SubAccount subAccount;
+    private String subAccount;
+    private String account;
+
+    public Allocation(String subAccount, String account, String orderId, String orderSize, int quantity) {
+        this.subAccount = subAccount;
+        this.account = account;
+        this.orderId = orderId;
+        this.orderSize = orderSize;
+        this.quantity = quantity;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Allocation that = (Allocation) o;
+        return quantity == that.quantity &&
+                Objects.equals(subAccount, that.subAccount) &&
+                Objects.equals(account, that.account) &&
+                Objects.equals(orderId, that.orderId) &&
+                Objects.equals(orderSize, that.orderSize);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(subAccount, account, orderId, orderSize, quantity);
+    }
+
+    public String getAccount() {
+        return account;
+    }
+
+    public void setAccount(String account) {
+        this.account = account;
+    }
+
+    private String orderId;
+    private String orderSize;
     private int quantity;
 
-    public Allocation(SubAccount subAccount, int quantity) {
+    public void setSubAccount(String subAccount) {
+        this.subAccount = subAccount;
+    }
+
+    public void setOrderId(String orderId) {
+        this.orderId = orderId;
+    }
+
+    public void setOrderSize(String orderSize) {
+        this.orderSize = orderSize;
+    }
+
+    public static long getSerialVersionUID() {
+        return serialVersionUID;
+    }
+
+    public String getOrderId() {
+        return orderId;
+    }
+
+    public String getOrderSize() {
+        return orderSize;
+    }
+
+    public Allocation(String subAccount, int quantity) {
         this.subAccount = subAccount;
         this.quantity = quantity;
     }
@@ -20,12 +81,8 @@ public class Allocation implements Serializable {
         return new Allocation.AllocationBuilder();
     }
 
-    public SubAccount getSubAccount() {
+    public String getSubAccount() {
         return this.subAccount;
-    }
-
-    public void setSubAccount(SubAccount subAccount) {
-        this.subAccount = subAccount;
     }
 
 
@@ -42,26 +99,12 @@ public class Allocation implements Serializable {
         return "Allocation(account=" + var10000 + ", subAccount=" + this.getSubAccount() + ", quantity=" + this.getQuantity() + ")";
     }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        Allocation that = (Allocation) o;
-        return quantity == that.quantity &&
-                Objects.equals(subAccount, that.subAccount) ;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(subAccount,  quantity);
-    }
-
     protected boolean canEqual(Object other) {
         return other instanceof Allocation;
     }
 
     public static class AllocationBuilder {
-        private SubAccount subAccount;
+        private String subAccount;
         private int quantity;
 
         AllocationBuilder() {
@@ -69,7 +112,7 @@ public class Allocation implements Serializable {
 
 
 
-        public Allocation.AllocationBuilder subAccount(SubAccount subAccount) {
+        public Allocation.AllocationBuilder subAccount(String subAccount) {
             this.subAccount = subAccount;
             return this;
         }

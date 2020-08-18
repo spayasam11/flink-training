@@ -82,8 +82,8 @@ public class KafkaOrderAssignment extends ExerciseBase {
                         for (Allocation allocation : value.getAllocations()) {
                             out.collect(new Tuple4<String, String, String, Integer>(
                                     value.getCusip(),
-                                    allocation.getSubAccount().getAccount(),
-                                    allocation.getSubAccount().getSubAccount(),
+                                    allocation.getAccount(),
+                                    allocation.getSubAccount(),
                                     (value.getBuySell() == BuySell.BUY ? allocation.getQuantity() : allocation.getQuantity() * -1)));
                                     // consider Sell accounts as negative
                         }

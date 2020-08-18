@@ -93,8 +93,8 @@ public class KafkaOrderAssignment3 extends ExerciseBase {
                         for (Allocation allocation : value.getAllocations()) {
                             out.collect(new FlatOrder(
                                     value.getCusip(), (value.getBuySell() == BuySell.BUY ? allocation.getQuantity() : allocation.getQuantity() * -1),
-                                    allocation.getSubAccount().getAccount(),
-                                    allocation.getSubAccount().getSubAccount()
+                                    allocation.getAccount(),
+                                    allocation.getSubAccount()
                             ));
                             // consider Sell accounts as negative qty
                         }
